@@ -1,0 +1,79 @@
+name: 🚀 CI/CD sécurisé
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # Étape 1️⃣ : Build & Test
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔍 Récupération du code
+        uses: actions/checkout@v3
+
+      - name: 🧩 Installation de Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: 📦 Installation des dépendances
+        run: npm install
+
+      - name: 🧪 Exécution des tests unitaires
+        run: npm test
+
+  # Étape 2️⃣ : Analyse de sécurité
+  security_scan:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+
+    steps:
+      - name: 🔍 Checkout du code
+        uses: actions/checkout@v3
+
+      - name: 🛡️ Analyse Snyk
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: 🔎 Scan des dépendances npm
+        run: npm audit --audit-level=moderate || true
+
+  # Étape 3️⃣ : Build Docker
+  docker_build:
+    runs-on: ubuntu-latest
+    needs: security_scan
+
+    steps:
+      - name: 🔍 Checkout du code
+        uses: actions/checkout@v3
+
+      - name: 🐳 Construction de l'image Docker
+        run: docker build -t monapp:latest .
+
+  # Étape 4️⃣ : Déploiement
+  deploy:
+    runs-on: ubuntu-latest
+    needs: docker_build
+
+    steps:
+      - name: 🚀 Déploiement via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /var/www/monapp
+            git pull
+            npm install --production
+            pm2 restart monapp
